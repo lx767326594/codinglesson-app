@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 考古偵探 - 朝代瓷器分類</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .drag-item {
+            cursor: grab;
+            transition: transform 0.2s, box-shadow 0.2s;
+            touch-action: none;
+        }
+        .drag-item:active {
+            cursor: grabbing;
+            transform: scale(1.1);
+            z-index: 50;
+        }
+        .drop-zone {
+            transition: all 0.3s;
+            border: 2px dashed #cbd5e1;
+        }
+        .drop-zone.drag-over {
+            background-color: #f1f5f9;
+            border-color: #64748b;
+            transform: scale(1.02);
+        }
+        .success-border {
+            border-color: #22c55e !important;
+            background-color: #f0fdf4 !important;
+        }
+        .ceramic-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+        .shard-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen p-4 font-sans text-slate-800">
+
+    <div class="max-w-5xl mx-auto">
+        <!-- 標題區 -->
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-slate-900 mb-2">考古實踐：朝代瓷器分類</h1>
+            <p class="text-slate-600">運用 AI 學習到的「模式識別」邏輯，將下方的瓷器歸類到正確的朝代盒子中。</p>
+        </header>
+
+        <!-- 遊戲主體 -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            
+            <!-- 待分類碎片區 -->
+            <div class="lg:col-span-1 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h2 class="font-bold mb-4 text-center border-b pb-2">待識別藝術品</h2>
+                <div id="shard-container" class="flex flex-wrap lg:flex-col gap-4 justify-center items-center min-h-[400px]">
+                    <!-- 碎片將由 JS 動態生成以實現隨機排序 -->
+                </div>
+            </div>
+
+            <!-- 朝代收集區 -->
+            <div class="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- 漢代盒子 -->
+                <div class="drop-zone rounded-xl p-6 flex flex-col items-center justify-center bg-white" data-target="han">
+                    <div class="text-lg font-bold mb-1">漢代 (Han)</div>
+                    <div class="text-xs text-slate-400 mb-4 font-mono">Pattern: Low-Brightness</div>
+                    <div class="flex gap-2">
+                        <div class="shard-slot w-20 h-20 border-2 border-dotted border-slate-200 rounded-lg flex items-center justify-center text-slate-300">#1</div>
+                        <div class="shard-slot w-20 h-20 border-2 border-dotted border-slate-200 rounded-lg flex items-center justify-center text-slate-300">#2</div>
+                    </div>
+                </div>
+
+                <!-- 宋代盒子 -->
+                <div class="drop-zone rounded-xl p-6 flex flex-col items-center justify-center bg-white" data-target="song">
+                    <div class="text-lg font-bold mb-1">宋代 (Song)</div>
+                    <div class="text-xs text-slate-400 mb-4 font-mono">Pattern: Color Smoothness</div>
+                    <div class="flex gap-2">
+                        <div class="shard-slot w-20 h-20 border-2 border-dotted border-slate-200 rounded-lg flex items-center justify-center text-slate-300">#1</div>
+                        <div class="shard-slot w-20 h-20 border-2 border-dotted border-slate-200 rounded-lg flex items-center justify-center text-slate-300">#2</div>
+                    </div>
+                </div>
+
+                <!-- 明代盒子 -->
+                <div class="drop-zone rounded-xl p-6 flex flex-col items-center justify-center bg-white" data-target="ming">
+                    <div class="text-lg font-bold mb-1">明代 (Ming)</div>
+                    <div class="text-xs text-slate-400 mb-4 font-mono">Pattern: Edge Gradient</div>
+                    <div class="flex gap-2">
+                        <div class="shard-slot w-20 h-20 border-2 border-dotted border-slate-200 rounded-lg flex items-center justify-center text-slate-300">#1</div>
+                        <div class="shard-slot w-20 h-20 border-2 border-dotted border-slate-200 rounded-lg flex items-center justify-center text-slate-300">#2</div>
+                    </div>
+                </div>
+
+                <!-- 清代盒子 -->
+                <div class="drop-zone rounded-xl p-6 flex flex-col items-center justify-center bg-white" data-target="qing">
+                    <div class="text-lg font-bold mb-1">清代 (Qing)</div>
+                    <div class="text-xs text-slate-400 mb-4 font-mono">Pattern: High-Frequency Density</div>
+                    <div class="flex gap-2">
+                        <div class="shard-slot w-20 h-20 border-2 border-dotted border-slate-200 rounded-lg flex items-center justify-center text-slate-300">#1</div>
+                        <div class="shard-slot w-20 h-20 border-2 border-dotted border-slate-200 rounded-lg flex items-center justify-center text-slate-300">#2</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部提示訊息 -->
+        <div id="feedback" class="mt-8 p-4 bg-slate-800 text-white rounded-lg text-center hidden">
+            <!-- 反饋內容 -->
+        </div>
+
+        <!-- 完成畫面 -->
+        <div id="congrats" class="mt-8 p-10 bg-cyan-600 text-white rounded-2xl text-center hidden">
+            <h2 class="text-3xl font-bold mb-4">分類任務圓滿完成！ 🎉</h2>
+            <p class="text-lg mb-6">你已成功利用 AI 的模式識別特徵對 8 件考古碎片進行了精確歸類。</p>
+            <button onclick="location.reload()" class="bg-white text-cyan-700 px-8 py-3 rounded-full font-bold hover:bg-slate-100 transition shadow-lg">重新開始實驗</button>
+        </div>
+    </div>
+
+    <script>
+        // 碎片數據配置
+        const shardData = [
+            { id: 'h1', dynasty: 'han', img: 'https://i.imgur.com/w6luoly.png', title: '漢代黑釉' },
+            { id: 'h2', dynasty: 'han', img: 'https://i.imgur.com/CgIr7YQ.png', title: '漢代灰陶' },
+            { id: 's1', dynasty: 'song', img: 'https://i.imgur.com/Rfvv5Z3.jpeg', title: '宋代青瓷' },
+            { id: 's2', dynasty: 'song', img: 'https://i.imgur.com/6BFYSa2.jpeg', title: '宋代白瓷' },
+            { id: 'm1', dynasty: 'ming', img: 'https://i.imgur.com/s5kMbLz.jpeg', title: '明代青花' },
+            { id: 'm2', dynasty: 'ming', img: 'https://i.imgur.com/314K11v.jpeg', title: '明代彩繪' },
+            { id: 'q1', dynasty: 'qing', img: 'https://i.imgur.com/wQjncrn.jpeg', title: '清代琺瑯' },
+            { id: 'q2', dynasty: 'qing', img: 'https://i.imgur.com/YOm42qc.png', title: '清代粉彩' }
+        ];
+
+        const infoMap = {
+            'han': '✅ 正確！AI 識別出漢代瓷器的【低亮度模式】，展現了早期陶瓷厚重質樸的特徵。',
+            'song': '✅ 正確！AI 檢測到釉面極高的【色域平滑度】，這是宋代單色釉瓷器的典型數據特徵。',
+            'ming': '✅ 正確！AI 通過【邊緣梯度檢測】捕捉到了明代青花瓷鮮明的藍白對比邊界。',
+            'qing': '✅ 正確！AI 檢測到了複雜的【高頻特徵點密度】，識別出清代工藝繁複的圖案模式。'
+        };
+
+        const shardContainer = document.getElementById('shard-container');
+        const dropZones = document.querySelectorAll('.drop-zone');
+        const feedback = document.getElementById('feedback');
+        const congrats = document.getElementById('congrats');
+        let solvedCount = 0;
+
+        // 打亂順序並生成碎片
+        function setupGame() {
+            const shuffled = [...shardData].sort(() => Math.random() - 0.5);
+            shuffled.forEach(data => {
+                const div = document.createElement('div');
+                div.id = data.id;
+                div.draggable = true;
+                div.dataset.dynasty = data.dynasty;
+                div.className = "drag-item w-20 h-20 ceramic-card rounded-lg flex items-center justify-center p-1 border border-slate-100 shadow-sm";
+                div.innerHTML = `<img src="${data.img}" alt="${data.title}" class="shard-img" title="${data.title}">`;
+                
+                // 拖拽事件
+                div.addEventListener('dragstart', handleDragStart);
+                div.addEventListener('touchstart', handleTouchStart, {passive: true});
+                
+                shardContainer.appendChild(div);
+            });
+        }
+
+        function handleDragStart(e) {
+            e.dataTransfer.setData('text/plain', e.target.closest('.drag-item').id);
+        }
+
+        // 放置邏輯
+        dropZones.forEach(zone => {
+            zone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                zone.classList.add('drag-over');
+            });
+
+            zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.classList.remove('drag-over');
+                
+                const shardId = e.dataTransfer.getData('text/plain');
+                processDrop(shardId, zone);
+            });
+        });
+
+        function processDrop(shardId, zone) {
+            const shard = document.getElementById(shardId);
+            if (!shard) return;
+
+            const shardDynasty = shard.dataset.dynasty;
+            const targetDynasty = zone.dataset.target;
+
+            if (shardDynasty === targetDynasty) {
+                // 找到第一個空的槽位
+                const slots = zone.querySelectorAll('.shard-slot');
+                let targetSlot = null;
+                for (let slot of slots) {
+                    if (slot.innerHTML.includes('#')) {
+                        targetSlot = slot;
+                        break;
+                    }
+                }
+
+                if (targetSlot) {
+                    targetSlot.innerHTML = '';
+                    targetSlot.appendChild(shard);
+                    targetSlot.classList.add('border-solid', 'border-green-400');
+                    shard.setAttribute('draggable', 'false');
+                    shard.classList.remove('w-20', 'h-20');
+                    shard.classList.add('w-full', 'h-full');
+                    
+                    showFeedback(infoMap[shardDynasty], 'bg-slate-800');
+                    solvedCount++;
+                    checkWin();
+                }
+            } else {
+                showFeedback('❌ 模式錯誤！AI 檢測到該碎片的特徵點與此朝代數據模型不符。', 'bg-red-500');
+            }
+        }
+
+        function showFeedback(text, bgColor) {
+            feedback.textContent = text;
+            feedback.className = `mt-8 p-4 text-white rounded-lg text-center animate-pulse ${bgColor}`;
+            feedback.classList.remove('hidden');
+            setTimeout(() => feedback.classList.add('hidden'), 3000);
+        }
+
+        function checkWin() {
+            if (solvedCount === 8) {
+                setTimeout(() => {
+                    document.querySelector('.grid').classList.add('hidden');
+                    congrats.classList.remove('hidden');
+                }, 800);
+            }
+        }
+
+        // 移動端觸控支持
+        let draggedNode = null;
+        function handleTouchStart(e) {
+            draggedNode = e.currentTarget;
+        }
+
+        document.addEventListener('touchend', (e) => {
+            if (!draggedNode) return;
+            const touch = e.changedTouches[0];
+            const target = document.elementFromPoint(touch.clientX, touch.clientY);
+            const zone = target ? target.closest('.drop-zone') : null;
+            if (zone) processDrop(draggedNode.id, zone);
+            draggedNode = null;
+        });
+
+        setupGame();
+    </script>
+</body>
+</html>

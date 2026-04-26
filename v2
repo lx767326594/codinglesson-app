@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>AI 考古實驗室 - 數據預處理</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            background-image: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            cursor: none;
+            user-select: none;
+        }
+        
+        #canvas-container {
+            position: relative;
+            width: 500px;
+            height: 500px;
+            box-shadow: 0 0 50px rgba(0,0,0,0.6);
+            border: 8px solid #334155;
+            background: #2d4a41; 
+        }
+
+        #clean-img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 1; 
+        }
+
+        #dirt-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2; 
+        }
+
+        #custom-brush {
+            position: fixed;
+            width: 80px;
+            height: 80px;
+            background: url('https://cdn-icons-png.flaticon.com/512/1039/1039915.png') no-repeat center;
+            background-size: contain;
+            pointer-events: none;
+            z-index: 9999;
+            transform: translate(-50%, -50%);
+            filter: drop-shadow(2px 4px 8px rgba(0,0,0,0.5));
+            transition: transform 0.1s ease-out;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .shimmer-bar {
+            background: linear-gradient(90deg, #22d3ee, #818cf8, #22d3ee);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite linear;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+<body class="text-white flex flex-col items-center justify-center min-h-screen p-6 overflow-hidden">
+
+    <div id="custom-brush"></div>
+
+    <div class="text-center mb-8">
+        <h1 class="text-4xl font-black tracking-tight mb-2 bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-500 to-emerald-400">
+            實驗室：數據預處理 (Preprocessing)
+        </h1>
+        <p class="text-slate-400 text-lg font-medium">數據清洗：移除物理噪音以提升 AI 置信度</p>
+    </div>
+
+    <div class="flex flex-col lg:flex-row gap-12 items-center">
+        <div id="canvas-container" class="rounded-3xl overflow-hidden border-slate-700 shadow-2xl">
+            <img id="clean-img" src="https://i.imgur.com/fOBHJIU.jpeg" onerror="this.style.display='none'; console.warn('圖片載入失敗')" alt="瓷片底圖">
+            <canvas id="dirt-canvas" width="500" height="500"></canvas>
+        </div>
+
+        <div class="glass-panel p-8 rounded-[2.5rem] w-80">
+            <div class="mb-10">
+                <h3 class="text-xs uppercase tracking-[0.3em] text-slate-500 font-black mb-6">AI 診斷系統</h3>
+                <div class="flex items-center gap-4 bg-black/40 p-5 rounded-2xl border border-slate-800">
+                    <div id="status-led" class="w-4 h-4 rounded-full bg-red-500 animate-pulse shadow-[0_0_15px_#ef4444]"></div>
+                    <span id="status-text" class="text-red-400 font-mono text-sm font-bold uppercase">噪音干擾</span>
+                </div>
+            </div>
+
+            <div class="space-y-10">
+                <div>
+                    <div class="flex justify-between items-end mb-4">
+                        <span class="text-xs text-slate-500 font-bold uppercase tracking-widest">特徵識別置信度</span>
+                        <span id="confidence-val" class="text-3xl font-black text-cyan-400 tabular-nums">28%</span>
+                    </div>
+                    <div class="w-full bg-slate-900 h-5 rounded-full border border-slate-800 overflow-hidden p-1 shadow-inner">
+                        <div id="confidence-bar" class="h-full rounded-full transition-all duration-300 ease-out bg-cyan-600" style="width: 28%;"></div>
+                    </div>
+                </div>
+
+                <div id="success-alert" class="hidden">
+                    <div class="bg-cyan-500/20 border border-cyan-500/50 text-cyan-400 py-4 rounded-2xl text-center font-bold animate-bounce text-sm">
+                        ✨ 數據採集成功 (100%)
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('dirt-canvas');
+        const ctx = canvas.getContext('2d');
+        const brush = document.getElementById('custom-brush');
+        const led = document.getElementById('status-led');
+        const statusText = document.getElementById('status-text');
+        const confVal = document.getElementById('confidence-val');
+        const confBar = document.getElementById('confidence-bar');
+        const successAlert = document.getElementById('success-alert');
+
+        function initDirt() {
+            ctx.clearRect(0, 0, 500, 500);
+
+            // 1. 基礎薄泥層 (已調低至 0.45，隱約可見花紋)
+            ctx.fillStyle = 'rgba(62, 44, 30, 0.2)';
+            ctx.fillRect(0, 0, 500, 500);
+
+            // 2. 鋪設大型「極薄區」 (中心透明度調至 0.1)
+            for(let i=0; i<35; i++) {
+                const x = Math.random() * 500;
+                const y = Math.random() * 500;
+                const radius = 120 + Math.random() * 180;
+                const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+                grad.addColorStop(0, `rgba(50, 40, 30, 0.05)`); 
+                grad.addColorStop(1, 'rgba(50, 40, 30, 0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
+            }
+
+            // 3. 鋪設「重垢區」 (保留高遮蓋力，增加厚度對比)
+            for(let i=0; i<45; i++) {
+                const x = Math.random() * 500;
+                const y = Math.random() * 500;
+                const radius = 50 + Math.random() * 120;
+                const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+                grad.addColorStop(0, `rgba(25, 15, 5, ${0.75 + Math.random() * 0.2})`); 
+                grad.addColorStop(0.5, `rgba(35, 25, 15, 0.3)`);
+                grad.addColorStop(1, 'rgba(35, 25, 15, 0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
+            }
+
+            // 4. 乾燥泥土斑塊 (微調透明度)
+            for(let i=0; i<20; i++) {
+                const x = Math.random() * 500;
+                const y = Math.random() * 500;
+                const radius = 30 + Math.random() * 80;
+                const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+                grad.addColorStop(0, `rgba(140, 120, 100, 0.15)`);
+                grad.addColorStop(1, 'rgba(140, 120, 100, 0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
+            }
+
+            // 5. 精細碎顆粒 (增加隨機性)
+            for(let i=0; i<18000; i++) {
+                const x = Math.random() * 500;
+                const y = Math.random() * 500;
+                const opacity = Math.random() * 0.7; // 降低顆粒最大透明度
+                ctx.fillStyle = `rgba(${40 + Math.random()*30}, ${30 + Math.random()*20}, 15, ${opacity})`;
+                ctx.beginPath(); 
+                ctx.arc(x, y, Math.random()*1.1, 0, Math.PI * 2); 
+                ctx.fill();
+            }
+        }
+
+        initDirt();
+
+        document.addEventListener('mousemove', (e) => {
+            brush.style.left = e.clientX + 'px';
+            brush.style.top = e.clientY + 'px';
+            brush.style.transform = `translate(-50%, -50%) ${isDrawing ? 'rotate(-20deg) scale(1.15)' : 'rotate(0deg) scale(1)'}`;
+        });
+
+        let isDrawing = false;
+        let lastCalcTime = 0;
+
+        function calculateConfidence() {
+            const now = Date.now();
+            if (now - lastCalcTime < 100) return; 
+            lastCalcTime = now;
+
+            const imageData = ctx.getImageData(0, 0, 500, 500).data;
+            let transparentPixels = 0;
+            // 判定門檻：Alpha 小於 40 代表基本清潔
+            for (let i = 3; i < imageData.length; i += 4) {
+                if (imageData[i] < 40) transparentPixels++;
+            }
+            
+            const percentCleared = transparentPixels / (500 * 500);
+            let confidence = 28 + (percentCleared * 72);
+            if (confidence > 100) confidence = 100;
+
+            const displayConf = Math.floor(confidence);
+            confVal.textContent = displayConf + '%';
+            confBar.style.width = displayConf + '%';
+
+            if (displayConf > 60 && displayConf <= 90) {
+                led.className = "w-4 h-4 rounded-full bg-yellow-500 shadow-[0_0_15px_#eab308]";
+                statusText.textContent = "自動標註特徵中";
+                statusText.className = "text-yellow-400 font-mono text-sm font-bold uppercase";
+                confBar.style.backgroundColor = "#eab308";
+            } else if (displayConf > 90) {
+                led.className = "w-4 h-4 rounded-full bg-emerald-500 shadow-[0_0_15px_#10b981]";
+                led.classList.remove('animate-pulse');
+                statusText.textContent = "數據採集成功";
+                statusText.className = "text-emerald-400 font-mono text-sm font-bold uppercase";
+                confBar.className = "h-full rounded-full transition-all duration-300 ease-out shimmer-bar";
+                successAlert.classList.remove('hidden');
+            }
+        }
+
+        function scrub(e) {
+            if (!isDrawing) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+            const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+
+            ctx.globalCompositeOperation = 'destination-out';
+            const grad = ctx.createRadialGradient(x, y, 0, x, y, 40);
+            grad.addColorStop(0, 'rgba(0,0,0,1)');
+            grad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = grad;
+            ctx.beginPath(); ctx.arc(x, y, 40, 0, Math.PI * 2); ctx.fill();
+            
+            calculateConfidence();
+        }
+
+        canvas.addEventListener('mousedown', () => isDrawing = true);
+        window.addEventListener('mouseup', () => isDrawing = false);
+        canvas.addEventListener('mousemove', scrub);
+        canvas.addEventListener('touchstart', (e) => { isDrawing = true; e.preventDefault(); }, {passive: false});
+        canvas.addEventListener('touchend', () => isDrawing = false);
+        canvas.addEventListener('touchmove', (e) => { scrub(e); e.preventDefault(); }, {passive: false});
+
+    </script>
+</body>
+</html>

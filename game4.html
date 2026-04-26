@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOP Computational Thinking Quiz</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f1f5f9;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        .option-card {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .option-card:hover {
+            background-color: rgba(30, 41, 59, 0.8);
+            border-color: #38bdf8;
+        }
+        .correct {
+            background-color: rgba(16, 185, 129, 0.2) !important;
+            border-color: #10b981 !important;
+            color: #34d399 !important;
+        }
+        .incorrect {
+            background-color: rgba(239, 68, 68, 0.2) !important;
+            border-color: #ef4444 !important;
+            color: #f87171 !important;
+        }
+        .explanation {
+            display: none;
+            animation: fadeIn 0.5s ease forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen py-12 px-4">
+    <div class="max-w-3xl mx-auto">
+        <!-- 標題 -->
+        <div class="text-center mb-12">
+            <h1 class="text-3xl font-black text-sky-400 mb-2 uppercase tracking-tight">SOP Reassembly Quiz</h1>
+            <p class="text-slate-400 font-mono text-sm">Testing Computational Thinking Essentials</p>
+        </div>
+
+        <!-- 第一題 -->
+        <div class="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 mb-8 shadow-xl">
+            <div class="flex items-center gap-3 mb-6">
+                <span class="bg-sky-500 text-white text-xs font-bold px-3 py-1 rounded-full">Q1</span>
+                <h2 class="text-xl font-semibold text-slate-100">In the SOP ceramic reassembly process, how is <span class="text-sky-400">Decomposition</span> applied?</h2>
+            </div>
+            
+            <div class="space-y-4" id="q1-options">
+                <div onclick="checkAnswer(1, 'A', this)" class="option-card border border-slate-700 p-5 rounded-2xl bg-slate-800/40">
+                    <span class="font-bold mr-2 text-sky-500">A.</span> By merging all shards into a single model without pre-filtering.
+                </div>
+                <div onclick="checkAnswer(1, 'B', this)" class="option-card border border-slate-700 p-5 rounded-2xl bg-slate-800/40">
+                    <span class="font-bold mr-2 text-sky-500">B.</span> By breaking the restoration task into phases: preprocessing, identification, and matching.
+                </div>
+                <div onclick="checkAnswer(1, 'C', this)" class="option-card border border-slate-700 p-5 rounded-2xl bg-slate-800/40">
+                    <span class="font-bold mr-2 text-sky-500">C.</span> By focusing solely on artistic value rather than geometric constraints.
+                </div>
+            </div>
+
+            <div id="q1-explanation" class="explanation mt-6 p-4 bg-slate-800/50 rounded-xl border-l-4 border-sky-500 text-sm italic text-slate-300">
+                Correct Answer: B. Decomposition involves breaking down a complex problem into smaller, manageable sub-tasks.
+            </div>
+        </div>
+
+        <!-- 第二題 -->
+        <div class="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 mb-8 shadow-xl">
+            <div class="flex items-center gap-3 mb-6">
+                <span class="bg-purple-500 text-white text-xs font-bold px-3 py-1 rounded-full">Q2</span>
+                <h2 class="text-xl font-semibold text-slate-100">When the system focuses on <span class="text-purple-400">Abstraction</span>, what is its primary action?</h2>
+            </div>
+            
+            <div class="space-y-4" id="q2-options">
+                <div onclick="checkAnswer(2, 'A', this)" class="option-card border border-slate-700 p-5 rounded-2xl bg-slate-800/40">
+                    <span class="font-bold mr-2 text-purple-500">A.</span> It identifies visual regularities across different dynasties.
+                </div>
+                <div onclick="checkAnswer(2, 'B', this)" class="option-card border border-slate-700 p-5 rounded-2xl bg-slate-800/40">
+                    <span class="font-bold mr-2 text-purple-500">B.</span> It creates a manual physical mold for every possible ceramic shape.
+                </div>
+                <div onclick="checkAnswer(2, 'C', this)" class="option-card border border-slate-700 p-5 rounded-2xl bg-slate-800/40">
+                    <span class="font-bold mr-2 text-purple-500">C.</span> It filters out "noise" (like dirt) to focus on the essence of glaze and geometry.
+                </div>
+            </div>
+
+            <div id="q2-explanation" class="explanation mt-6 p-4 bg-slate-800/50 rounded-xl border-l-4 border-purple-500 text-sm italic text-slate-300">
+                Correct Answer: C. Abstraction removes unnecessary details (dirt/noise) to focus on core information.
+            </div>
+        </div>
+
+        <button onclick="window.location.reload()" class="w-full py-4 text-slate-500 hover:text-sky-400 text-xs font-bold tracking-widest uppercase transition-colors">
+            Reset Quiz
+        </button>
+    </div>
+
+    <script>
+        const answers = { 1: 'B', 2: 'C' };
+        const answered = { 1: false, 2: false };
+
+        function checkAnswer(qId, choice, element) {
+            if (answered[qId]) return; // 防止重複點擊
+            
+            const isCorrect = choice === answers[qId];
+            answered[qId] = true;
+
+            // 視覺回饋
+            element.classList.add(isCorrect ? 'correct' : 'incorrect');
+            
+            // 顯示解釋
+            document.getElementById(`q${qId}-explanation`).style.display = 'block';
+
+            // 如果選錯了，標示出正確答案
+            if (!isCorrect) {
+                const options = document.getElementById(`q${qId}-options`).children;
+                for (let opt of options) {
+                    if (opt.innerText.startsWith(answers[qId])) {
+                        opt.classList.add('correct');
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

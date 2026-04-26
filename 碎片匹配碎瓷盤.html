@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 考古實驗室 - SOP 空間匹配算法</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #020617;
+            color: #f8fafc;
+            overflow-x: hidden;
+            user-select: none;
+            /* 防止移動端拉動刷新 */
+            overscroll-behavior: none;
+        }
+
+        .scanner-line {
+            width: 100%;
+            height: 2px;
+            background: rgba(34, 211, 238, 0.5);
+            box-shadow: 0 0 15px #22d3ee;
+            position: absolute;
+            top: 0;
+            left: 0;
+            animation: scan 4s infinite linear;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        @keyframes scan {
+            0% { top: 0%; }
+            100% { top: 100%; }
+        }
+
+        .drop-zone-active {
+            box-shadow: inset 0 0 80px rgba(34, 211, 238, 0.3);
+            border-color: #22d3ee !important;
+        }
+
+        .shard-item {
+            cursor: grab;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            touch-action: none;
+        }
+        
+        .shard-item:active {
+            cursor: grabbing;
+            transform: scale(0.95);
+        }
+
+        /* 瓷片移動容器樣式 - 針對縮小後的佈局優化 */
+        #active-shard {
+            position: absolute;
+            cursor: move;
+            z-index: 50;
+            filter: drop-shadow(0 0 25px rgba(0,0,0,0.9));
+            touch-action: none;
+            width: 300px; 
+            height: 300px;
+            pointer-events: auto;
+            -webkit-user-drag: none; 
+        }
+
+        .match-glow {
+            filter: drop-shadow(0 0 50px #10b981) brightness(1.2) !important;
+        }
+
+        /* 缺口引導框 - 根據縮小後的比例微調位置 */
+        .target-guide {
+            position: absolute;
+            width: 220px;
+            height: 220px;
+            border: 2px dashed rgba(34, 211, 238, 0.4);
+            border-radius: 50%;
+            top: 80px;
+            right: 100px;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            color: rgba(34, 211, 238, 0.6);
+            background: rgba(34, 211, 238, 0.03);
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4 md:p-8">
+
+    <!-- 頂部數據面板 - 自適應寬度與佈局 -->
+    <div class="w-full max-w-7xl px-4 md:px-12 flex flex-col md:flex-row justify-between items-center md:items-end gap-6 mb-8">
+        <div class="text-center md:text-left">
+            <h1 class="text-3xl md:text-4xl font-black tracking-tighter text-cyan-400">系統：空間幾何匹配 (SOP)</h1>
+            <p class="text-slate-500 font-mono text-sm uppercase italic">Reassembly AI: Geometry Alignment Mode (Adaptive View)</p>
+        </div>
+        <div class="bg-slate-900/80 border border-slate-700 p-4 rounded-xl backdrop-blur-md flex gap-6 md:gap-8 shadow-2xl">
+            <div>
+                <div class="text-[10px] text-slate-500 uppercase tracking-widest mb-1">匹配置信度</div>
+                <div id="confidence-display" class="text-2xl md:text-3xl font-black text-slate-700 tabular-nums">00.00%</div>
+            </div>
+            <div class="w-px bg-slate-800"></div>
+            <div>
+                <div class="text-[10px] text-slate-500 uppercase tracking-widest mb-1">相對偏移 (X, Y)</div>
+                <div id="offset-display" class="text-lg md:text-xl font-mono text-slate-600">0, 0</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主要互動區域 - 響應式排列 -->
+    <div class="flex flex-col lg:flex-row gap-8 lg:gap-16 items-center w-full max-w-[95vw] justify-center">
+        <!-- 左側樣本列 -->
+        <div id="left-shards" class="flex flex-row lg:flex-col gap-4 lg:gap-6 order-2 lg:order-1">
+            <div class="hidden lg:block text-[10px] text-slate-500 mb-2 font-bold uppercase tracking-[0.2em]">Bank Alpha</div>
+        </div>
+
+        <!-- 主操作區域 - 縮小比例 -->
+        <div class="relative group order-1 lg:order-2">
+            <div class="absolute -inset-10 md:-inset-20 bg-cyan-500/5 rounded-full blur-[100px]"></div>
+            <div id="drop-zone" 
+                 class="relative w-[340px] h-[340px] sm:w-[500px] sm:h-[500px] md:w-[650px] md:h-[650px] border border-slate-800 rounded-full flex items-center justify-center overflow-hidden bg-slate-950 shadow-[0_0_100px_rgba(0,0,0,0.6)] transition-all">
+                
+                <div class="scanner-line"></div>
+                
+                <!-- 瓷盤底圖 -->
+                <img id="base-plate" src="https://i.imgur.com/Td9w5yy.png" class="w-[90%] h-[90%] object-contain opacity-20 pointer-events-none transition-opacity duration-700">
+                
+                <!-- 引導框 -->
+                <div id="target-box" class="target-guide hidden">
+                    <span class="animate-pulse">對齊區域</span>
+                </div>
+
+                <!-- 碎片存放容器 -->
+                <div id="placed-shard-container" class="absolute inset-0 pointer-events-none"></div>
+
+                <div class="absolute inset-0 border-[1px] border-slate-800/50 rounded-full pointer-events-none"></div>
+            </div>
+        </div>
+
+        <!-- 右側樣本列 -->
+        <div id="right-shards" class="flex flex-row lg:flex-col gap-4 lg:gap-6 order-3">
+            <div class="hidden lg:block text-[10px] text-slate-500 mb-2 font-bold uppercase tracking-[0.2em]">Bank Beta</div>
+        </div>
+    </div>
+
+    <!-- 底部控制面板 -->
+    <div id="status-panel" class="mt-12 w-full max-w-2xl p-6 bg-slate-900/80 border border-slate-700 rounded-3xl backdrop-blur-xl mb-8">
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-5">
+                <div id="indicator" class="w-3 h-3 rounded-full bg-slate-700 transition-colors duration-300"></div>
+                <div id="status-text" class="text-sm font-mono text-slate-400 font-medium">系統就緒，請開始匹配任務。</div>
+            </div>
+            <button onclick="initSystem()" class="text-[11px] px-6 py-3 bg-slate-800 border border-slate-600 rounded-full hover:bg-slate-700 hover:text-cyan-400 transition-all uppercase font-black tracking-widest active:scale-95">重置樣本</button>
+        </div>
+    </div>
+
+    <script>
+        const confidenceDisplay = document.getElementById('confidence-display');
+        const offsetDisplay = document.getElementById('offset-display');
+        const statusText = document.getElementById('status-text');
+        const indicator = document.getElementById('indicator');
+        const container = document.getElementById('placed-shard-container');
+        const basePlate = document.getElementById('base-plate');
+        const targetBox = document.getElementById('target-box');
+        const dropZone = document.getElementById('drop-zone');
+
+        const shardData = [
+            { id: 'correct', rate: 96.23, src: 'https://i.imgur.com/MBUWQr0.png' },
+            { id: 'near1', rate: 84.66, src: 'https://i.imgur.com/lP7bzyl.png' },
+            { id: 'near2', rate: 70.12, src: 'https://i.imgur.com/ZuPeeli.png' },
+            { id: 'err1', rate: 20.77, src: 'https://i.imgur.com/KJTjg0I.png' },
+            { id: 'err2', rate: 12.45, src: 'https://i.imgur.com/ceIpCgb.png' }
+        ];
+
+        let activeShard = null;
+        let isDragging = false;
+        let offsetX = 0, offsetY = 0;
+        let activeRate = 0;
+
+        function initSystem() {
+            resetUI();
+            const shuffled = [...shardData].sort(() => Math.random() - 0.5);
+            
+            const leftList = document.getElementById('left-shards');
+            const rightList = document.getElementById('right-shards');
+            
+            leftList.innerHTML = '<div class="hidden lg:block text-[10px] text-slate-500 mb-2 font-bold uppercase tracking-[0.2em]">Bank Alpha</div>';
+            rightList.innerHTML = '<div class="hidden lg:block text-[10px] text-slate-500 mb-2 font-bold uppercase tracking-[0.2em]">Bank Beta</div>';
+
+            shuffled.forEach((item, index) => {
+                const el = document.createElement('div');
+                // 響應式尺寸：小屏 w-16 大屏 w-36
+                el.className = "shard-item w-20 h-20 md:w-36 md:h-36 bg-slate-900/40 rounded-xl md:rounded-2xl border border-slate-800 p-2 md:p-4 flex items-center justify-center hover:border-cyan-500/50 hover:bg-slate-800/80 shadow-lg";
+                el.draggable = true;
+                el.dataset.id = item.id;
+                el.dataset.rate = item.rate;
+                el.dataset.src = item.src;
+                el.innerHTML = `<img src="${item.src}" class="max-w-[95%] max-h-[95%] object-contain pointer-events-none">`;
+                
+                el.addEventListener('dragstart', handleDragStart);
+                
+                // 觸摸設備支持
+                el.addEventListener('touchstart', (e) => {
+                    const touch = e.touches[0];
+                    const ghost = el.cloneNode(true);
+                    ghost.style.position = "fixed";
+                    ghost.style.opacity = "0.5";
+                    ghost.id = "touch-ghost";
+                    document.body.appendChild(ghost);
+                    handleTouchMove(e);
+                });
+
+                if (index < 3) leftList.appendChild(el);
+                else rightList.appendChild(el);
+            });
+        }
+
+        function handleDragStart(e) {
+            e.dataTransfer.setData("id", e.currentTarget.dataset.id);
+            e.dataTransfer.setData("rate", e.currentTarget.dataset.rate);
+            e.dataTransfer.setData("src", e.currentTarget.dataset.src);
+        }
+
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drop-zone-active'); });
+        dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('drop-zone-active'); });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drop-zone-active');
+            const id = e.dataTransfer.getData("id");
+            const rate = parseFloat(e.dataTransfer.getData("rate"));
+            const src = e.dataTransfer.getData("src");
+            if (id) placeShard(id, rate, src);
+        });
+
+        function placeShard(id, rate, src) {
+            clearCurrentShard();
+            activeRate = rate;
+            basePlate.style.opacity = "1";
+            targetBox.classList.remove('hidden');
+
+            const img = document.createElement('img');
+            img.id = "active-shard";
+            img.src = src;
+            
+            // 初始落點根據容器大小適配
+            const rect = dropZone.getBoundingClientRect();
+            img.style.left = (rect.width * 0.3) + "px"; 
+            img.style.top = (rect.height * 0.3) + "px";
+            
+            img.addEventListener('mousedown', startMoving);
+            img.addEventListener('touchstart', startMoving, {passive: false});
+            container.appendChild(img);
+            activeShard = img;
+            updateStatus(rate);
+        }
+
+        function startMoving(e) {
+            e.preventDefault(); 
+            isDragging = true;
+            const clientX = e.clientX || e.touches[0].clientX;
+            const clientY = e.clientY || e.touches[0].clientY;
+            const rect = activeShard.getBoundingClientRect();
+            offsetX = clientX - rect.left;
+            offsetY = clientY - rect.top;
+
+            document.addEventListener('mousemove', onMoving);
+            document.addEventListener('touchmove', onMoving, {passive: false});
+            document.addEventListener('mouseup', stopMoving);
+            document.addEventListener('touchend', stopMoving);
+            activeShard.style.cursor = "grabbing";
+        }
+
+        function onMoving(e) {
+            if (!isDragging || !activeShard) return;
+            const clientX = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+            const clientY = e.clientY || (e.touches ? e.touches[0].clientY : 0);
+            const containerRect = dropZone.getBoundingClientRect();
+            
+            let left = clientX - containerRect.left - offsetX;
+            let top = clientY - containerRect.top - offsetY;
+
+            activeShard.style.left = left + "px";
+            activeShard.style.top = top + "px";
+
+            offsetDisplay.textContent = `${Math.round(left)}, ${Math.round(top)}`;
+            checkMatch(left, top);
+        }
+
+        function stopMoving() {
+            isDragging = false;
+            document.removeEventListener('mousemove', onMoving);
+            document.removeEventListener('touchmove', onMoving);
+            if(activeShard) activeShard.style.cursor = "move";
+        }
+
+        function checkMatch(left, top) {
+            // 根據縮小後的 650px 容器微調目標點
+            // 原 825px 對應 425/30 -> 650px 約對應 335/24
+            const containerRect = dropZone.getBoundingClientRect();
+            const ratio = containerRect.width / 825;
+            const targetX = 425 * ratio; 
+            const targetY = 30 * ratio;
+            
+            const distance = Math.sqrt(Math.pow(left - targetX, 2) + Math.pow(top - targetY, 2));
+
+            if (distance < (35 * ratio) && activeRate > 95) {
+                confidenceDisplay.textContent = "99.98%";
+                confidenceDisplay.style.color = "#10b981";
+                activeShard.classList.add('match-glow');
+                activeShard.style.left = targetX + "px";
+                activeShard.style.top = targetY + "px";
+                statusText.textContent = "狀態：幾何鏈路閉合。匹配成功。";
+                statusText.className = "text-sm font-mono text-emerald-400 font-bold";
+                indicator.className = "w-3 h-3 rounded-full bg-emerald-500 animate-ping";
+            } else {
+                if(activeShard) activeShard.classList.remove('match-glow');
+                updateStatus(activeRate);
+            }
+        }
+
+        function updateStatus(rate) {
+            confidenceDisplay.textContent = rate.toFixed(2) + "%";
+            confidenceDisplay.style.color = rate > 90 ? "#22d3ee" : (rate > 70 ? "#eab308" : "#ef4444");
+            if (rate > 90) {
+                statusText.textContent = "分析：高度吻合。拖動對齊右上缺口。";
+                statusText.className = "text-sm font-mono text-cyan-400";
+                indicator.className = "w-3 h-3 rounded-full bg-cyan-500 shadow-[0_0_10px_#22d3ee]";
+            } else {
+                statusText.textContent = rate > 70 ? "警告：空間結構偏移。" : "錯誤：非目標碎片樣本。";
+                statusText.className = `text-sm font-mono ${rate > 70 ? 'text-yellow-500' : 'text-red-500'}`;
+                indicator.className = `w-3 h-3 rounded-full ${rate > 70 ? 'bg-yellow-500' : 'bg-red-600'}`;
+            }
+        }
+
+        function clearCurrentShard() { container.innerHTML = ''; activeShard = null; }
+
+        function resetUI() {
+            clearCurrentShard();
+            basePlate.style.opacity = "0.2";
+            targetBox.classList.add('hidden');
+            confidenceDisplay.textContent = "00.00%";
+            confidenceDisplay.style.color = "#475569";
+            offsetDisplay.textContent = "0, 0";
+            statusText.textContent = "系統就緒，等待高維數據樣本輸入。";
+            statusText.className = "text-sm font-mono text-slate-500";
+            indicator.className = "w-3 h-3 rounded-full bg-slate-700";
+        }
+
+        window.onload = initSystem;
+    </script>
+</body>
+</html>

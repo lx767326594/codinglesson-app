@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>生化標準曲線比對器 V4</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body { font-family: -apple-system, system-ui, sans-serif; text-align: center; background: #f0f2f5; color: #333; padding: 10px; margin: 0; }
+        .card { background: white; border-radius: 15px; padding: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        #imgContainer { position: relative; display: inline-block; width: 100%; margin-top: 10px; border-radius: 10px; border: 2px solid #ddd; background: #eee; min-height: 200px; overflow: hidden;}
+        #preview { width: 100%; display: block; border-radius: 10px; }
+        .click-mark { position: absolute; width: 26px; height: 26px; background: rgba(255, 59, 48, 0.9); color: white; border-radius: 50%; border: 2px solid white; font-size: 10px; line-height: 26px; text-align: center; pointer-events: none; transform: translate(-50%, -50%); font-weight: bold; z-index: 10; }
+        
+        button { background: #007AFF; color: white; border: none; padding: 10px 5px; border-radius: 8px; margin: 4px 2px; font-size: 12px; min-width: 65px; flex: 1; }
+        button.active { background: #FF3B30; box-shadow: 0 0 8px rgba(255,59,48,0.4); }
+        .btn-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; }
+        
+        .status-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 10px 0; }
+        .std-box { border: 1px solid #ddd; padding: 5px 2px; border-radius: 6px; font-size: 10px; background: #fafafa; }
+        .std-box input { width: 90%; border: none; background: transparent; text-align: center; color: #007AFF; font-weight: bold; font-size: 12px; border-bottom: 1px dashed #007AFF; }
+        .std-box span { display: block; margin-top: 3px; color: #666; font-size: 9px; }
+
+        .result-area { background: #E1F5FE; padding: 15px; border-radius: 15px; border: 2px solid #007AFF; }
+        #fileInput { margin: 10px 0; font-size: 14px; width: 100%; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h3>🧪 標準曲線比對助手 V4</h3>
+    <p style="font-size: 11px; color: #666;">1.點擊上傳圖片 2.如需修改可點擊藍色數字修改濃度 3.點圖標定五個樣本 4.點圖標定檢測實驗樣品</p>
+    <input type="file" id="fileInput" accept="image/*" capture="camera">
+    
+    <div class="status-grid">
+        <div class="std-box" id="box_0">
+            <input type="number" value="1" id="c_0">
+            <span id="v_0">-</span>
+        </div>
+        <div class="std-box" id="box_1">
+            <input type="number" value="0.2" id="c_1">
+            <span id="v_1">-</span>
+        </div>
+        <div class="std-box" id="box_2">
+            <input type="number" value="0.04" id="c_2">
+            <span id="v_2">-</span>
+        </div>
+        <div class="std-box" id="box_3">
+            <input type="number" value="0.008" id="c_3">
+            <span id="v_3">-</span>
+        </div>
+        <div class="std-box" id="box_4">
+            <input type="number" value="0.0016" id="c_4">
+            <span id="v_4">-</span>
+        </div>
+    </div>
+
+    <div class="btn-grid">
+        <button onclick="setMode(0, this)">標定 Lable 1</button>
+        <button onclick="setMode(1, this)">標定 Lable 2</button>
+        <button onclick="setMode(2, this)">標定 Lable 3</button>
+        <button onclick="setMode(3, this)">標定 Lable 4</button>
+        <button onclick="setMode(4, this)">標定 Lable 5</button>
+    </div>
+    <button onclick="setMode('test', this)" style="background:#34C759; width: 95%; margin-top: 10px; font-size: 16px; font-weight: bold;">點擊檢測未知樣品</button>
+</div>
+
+<div id="imgContainer">
+    <img id="preview" src="" alt="請先上傳照片">
+</div>
+
+<canvas id="calcCanvas" style="display:none;"></canvas>
+
+<div class="card result-area">
+    <h4>檢測結果：</h4>
+    <div id="finalResult" style="font-size: 18px;">等待數據中...</div>
+</div>
+
+<script>
+    let currentMode = null;
+    let standards = [null, null, null, null, null]; // 存儲亮度值
+    const preview = document.getElementById('preview');
+    const container = document.getElementById('imgContainer');
+    const canvas = document.getElementById('calcCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    document.getElementById('fileInput').onchange = function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            preview.src = event.target.result;
+            document.querySelectorAll('.click-mark').forEach(m => m.remove());
+            standards = [null, null, null, null, null];
+            document.querySelectorAll('.std-box span').forEach(s => s.innerText = '-');
+            document.querySelectorAll('.std-box').forEach(b => b.style.background = "#fafafa");
+            document.getElementById('finalResult').innerText = "請依次標定 5 個標準點";
+        };
+        reader.readAsDataURL(file);
+    };
+
+    function setMode(mode, btn) {
+        if (!preview.src || preview.src.includes('')) {
+            if(!preview.complete || preview.naturalWidth === 0) {
+                alert("請先上傳照片！");
+                return;
+            }
+        }
+        currentMode = mode;
+        document.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    }
+
+    preview.onclick = function(e) {
+        if (currentMode === null) return;
+
+        const rect = preview.getBoundingClientRect();
+        const offsetX = e.clientX - rect.left;
+        const offsetY = e.clientY - rect.top;
+
+        // 放置標記
+        const mark = document.createElement('div');
+        mark.className = 'click-mark';
+        mark.style.left = (offsetX / rect.width * 100) + '%';
+        mark.style.top = (offsetY / rect.height * 100) + '%';
+        mark.innerText = currentMode === 'test' ? 'T' : (currentMode + 1);
+        if(currentMode === 'test') mark.style.background = "#34C759";
+        
+        if(currentMode !== 'test') {
+            const oldMark = document.querySelector(`.mark-${currentMode}`);
+            if(oldMark) oldMark.remove();
+            mark.classList.add(`mark-${currentMode}`);
+        }
+        container.appendChild(mark);
+
+        // 顏色分析
+        canvas.width = preview.naturalWidth;
+        canvas.height = preview.naturalHeight;
+        ctx.drawImage(preview, 0, 0);
+        const x = offsetX * (canvas.width / rect.width);
+        const y = offsetY * (canvas.height / rect.height);
+        const imgData = ctx.getImageData(Math.max(0, x-5), Math.max(0, y-5), 10, 10).data;
+        let lum = 0;
+        for (let i = 0; i < imgData.length; i += 4) {
+            lum += (imgData[i]*0.299 + imgData[i+1]*0.587 + imgData[i+2]*0.114);
+        }
+        const avgLum = lum / (imgData.length / 4);
+
+        if (currentMode === 'test') {
+            doLinearInterpolation(avgLum);
+        } else {
+            standards[currentMode] = avgLum;
+            document.getElementById('v_' + currentMode).innerText = avgLum.toFixed(1);
+            document.getElementById('box_' + currentMode).style.background = "#e1ffed";
+        }
+    };
+
+    function doLinearInterpolation(testLum) {
+        // 獲取當前輸入的濃度值
+        let data = [];
+        for(let i=0; i<5; i++) {
+            if(standards[i] !== null) {
+                data.push({
+                    c: parseFloat(document.getElementById('c_'+i).value),
+                    v: standards[i]
+                });
+            }
+        }
+
+        if(data.length < 2) {
+            alert("請至少標定兩個點！");
+            return;
+        }
+
+        // 根據亮度排序（由深到淺，即數值由小到大）
+        data.sort((a, b) => a.v - b.v);
+
+        let finalConc = null;
+
+        // 模擬 Excel 線性擬合邏輯
+        if (testLum <= data[0].v) {
+            finalConc = data[0].c; // 超出上限
+            resHtml = `濃度極高<br>推測為: <b>${finalConc.toFixed(4)}</b>`;
+        } else if (testLum >= data[data.length-1].v) {
+            finalConc = data[data.length-1].c; // 超出下限
+            resHtml = `濃度極低<br>推測為: <b>${finalConc.toFixed(4)}</b>`;
+        } else {
+            // 在區間內進行線性插值計算： y = y1 + (x - x1) * (y2 - y1) / (x2 - x1)
+            for (let i = 0; i < data.length - 1; i++) {
+                let p1 = data[i];
+                let p2 = data[i+1];
+                if (testLum >= p1.v && testLum <= p2.v) {
+                    // 這裡的公式計算出精確數值
+                    finalConc = p1.c + (testLum - p1.v) * (p2.c - p1.c) / (p2.v - p1.v);
+                    resHtml = `預估濃度為:<br><b>${finalConc.toFixed(5)}</b>`;
+                    break;
+                }
+            }
+        }
+        document.getElementById('finalResult').innerHTML = resHtml + `<br><small style="color:#888;">亮度值: ${testLum.toFixed(1)}</small>`;
+    }
+</script>
+</body>
+</html>
